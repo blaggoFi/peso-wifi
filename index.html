@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FFD040" />
+<title>Peso WiFi</title>
+<!--
+  Captive portal splash page.
+  Everything (styles, icons, script) is inside this one file on purpose:
+  phones have no internet before paying, so nothing can load from outside.
+  Settings are in the CONFIG block near the bottom of this file.
+-->
+<style>
+  :root {
+    --yellow: #ffd040;
+    --yellow-deep: #f2bd12;
+    --yellow-soft: #fff6d6;
+    --black: #000000;
+    --ink: #1c1c1c;
+    --muted: #6b6b6b;
+    --line: #e6e4dc;
+    --bg: #f7f6f2;
+    --white: #ffffff;
+    --ok: #157a46;
+    --error: #b3261e;
+    --radius: 14px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.45;
+    color: var(--ink);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1, h2, p { margin: 0; }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 3px solid var(--black); outline-offset: 2px; }
+
+  /* ---------- Header band ---------- */
+  .band {
+    background: var(--yellow);
+    padding: max(20px, env(safe-area-inset-top)) 20px 64px;
+  }
+  .band-inner, .page { max-width: 440px; margin: 0 auto; }
+  .network {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px;
+  }
+  .network svg { flex-shrink: 0; }
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-left: auto;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.08);
+    font-size: 12px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--black); opacity: 0.45; }
+  .status.is-online::before { background: var(--ok); opacity: 1; }
+  .headline {
+    margin-top: 28px;
+    font-size: clamp(34px, 10vw, 44px);
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+  }
+  .lede { margin-top: 10px; font-size: 16px; max-width: 30ch; }
+
+  /* ---------- Page body ---------- */
+  .page { padding: 0 16px max(28px, env(safe-area-inset-bottom)); margin-top: -40px; }
+  .sheet {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 1px 0 var(--line), 0 12px 32px rgba(60, 50, 0, 0.08);
+  }
+  .sheet + .sheet { margin-top: 14px; }
+  .sheet-title { font-size: 17px; font-weight: 700; margin-bottom: 14px; }
+
+  /* Plans */
+  .plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 0; padding: 0; margin: 0; }
+  .plan { position: relative; cursor: pointer; }
+  .plan input { position: absolute; opacity: 0; pointer-events: none; }
+  .plan-body {
+    display: flex; flex-direction: column; gap: 2px;
+    height: 100%;
+    padding: 14px 14px 12px;
+    border: 2px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--white);
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .plan-time { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  .plan-price { font-size: 15px; color: var(--muted); font-weight: 600; }
+  .plan-tag {
+    align-self: flex-start;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--yellow-soft);
+    font-size: 12px; font-weight: 700;
+  }
+  .plan input:checked + .plan-body { border-color: var(--black); background: var(--yellow-soft); }
+  .plan input:checked + .plan-body .plan-price { color: var(--ink); }
+  .plan input:checked + .plan-body .plan-tag { background: var(--yellow); }
+  .plan input:focus-visible + .plan-body { outline: 3px solid var(--black); outline-offset: 2px; }
+  .plan-check {
+    position: absolute; top: 10px; right: 10px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--black); color: var(--yellow);
+    display: grid; place-items: center;
+    opacity: 0; transform: scale(0.6);
+    transition: opacity 0.12s, transform 0.12s;
+  }
+  .plan input:checked ~ .plan-check { opacity: 1; transform: scale(1); }
+
+  /* Buttons */
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%;
+    min-height: 54px;
+    padding: 12px 18px;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    font-size: 17px; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.08s, background 0.12s;
+  }
+  .btn:active { transform: scale(0.985); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-blaggo { background: var(--yellow); color: var(--black); }
+  .btn-blaggo:hover { background: var(--yellow-deep); }
+  .btn-outline { background: var(--white); border-color: var(--black); color: var(--black); }
+  .btn-dark { background: var(--black); color: var(--white); }
+  .btn-text {
+    min-height: 44px; border: 0; background: none;
+    font-size: 15px; font-weight: 600; color: var(--muted);
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .blaggo-logo { height: 24px; width: auto; display: block; }
+  .pay-area { margin-top: 18px; }
+  .pay-note { margin-top: 10px; text-align: center; font-size: 13px; color: var(--muted); }
+
+  .other-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .way {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+    padding: 14px;
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--white);
+    text-align: left;
+    cursor: pointer;
+  }
+  .way:hover { border-color: var(--black); }
+  .way strong { font-size: 15px; }
+  .way span { font-size: 13px; color: var(--muted); line-height: 1.3; }
+
+  /* Payment screen */
+  .back {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin: 0 0 12px -6px; padding: 6px;
+    border: 0; background: none; font-weight: 600; cursor: pointer;
+  }
+  .amount-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .amount { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .amount-for { color: var(--muted); font-weight: 600; text-align: right; }
+  .steps { list-style: none; margin: 18px 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .steps li { display: flex; gap: 12px; align-items: flex-start; }
+  .step-num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--black); color: var(--yellow);
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 800;
+  }
+  .ref {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 14px;
+    border: 2px dashed var(--black);
+    border-radius: var(--radius);
+    background: var(--yellow-soft);
+  }
+  .ref-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .ref-code { font-size: 22px; font-weight: 800; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+  .copy {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px;
+    border: 1.5px solid var(--black); border-radius: 10px;
+    background: var(--white); font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .waiting {
+    display: flex; align-items: center; gap: 10px;
+    margin: 16px 0;
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-size: 14px;
+  }
+  .spinner {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2.5px solid var(--line);
+    border-top-color: var(--black);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waiting time { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* Coins */
+  .coin-total { text-align: center; margin: 8px 0 4px; }
+  .coin-total .amount { font-size: 56px; }
+  .coin-time { text-align: center; color: var(--muted); font-weight: 600; }
+  .coin-demo { display: flex; gap: 8px; justify-content: center; margin: 14px 0 4px; }
+  .coin-demo button {
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 2px solid var(--black); background: var(--yellow); font-weight: 800; cursor: pointer;
+  }
+
+  /* Voucher */
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-weight: 600; font-size: 14px; }
+  .field input {
+    min-height: 54px;
+    padding: 12px 14px;
+    border: 2px solid var(--line); border-radius: var(--radius);
+    font-size: 20px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .field input:focus { outline: none; border-color: var(--black); }
+
+  /* Online */
+  .sheet.online { text-align: center; padding-top: 28px; }
+  .online-badge {
+    width: 64px; height: 64px; margin: 0 auto 14px;
+    border-radius: 50%;
+    background: var(--yellow); color: var(--black);
+    display: grid; place-items: center;
+  }
+  .countdown { margin: 14px 0 4px; font-size: 48px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .countdown-label { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+
+  .message { margin-top: 12px; padding: 10px 14px; border-radius: 10px; font-size: 14px; }
+  .message-error { background: #fdecea; color: var(--error); }
+  .message-info { background: var(--yellow-soft); }
+
+  .demo-flag {
+    display: block; margin: 12px auto 0; padding: 4px 10px;
+    border: 1px dashed var(--muted); border-radius: 999px;
+    width: fit-content; font-size: 12px; color: var(--muted);
+  }
+  .foot { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); }
+  .foot p + p { margin-top: 4px; }
+
+  @media (min-width: 600px) {
+    .band { padding-bottom: 80px; }
+    .page { margin-top: -56px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation-duration: 2s !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="band-inner">
+    <div class="network">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.6a10 10 0 0 1 14 0M8.5 16.3a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1.2" fill="currentColor"/></svg>
+      <span id="network-name">Peso WiFi</span>
+      <span class="status" id="status">Not online yet</span>
+    </div>
+    <h1 class="headline" id="headline">Get online</h1>
+    <p class="lede" id="lede">Pick how long you need, then pay with Blaggo.</p>
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- 1. Choose a plan -->
+  <section id="screen-choose">
+    <div class="sheet">
+      <h2 class="sheet-title" id="plans-title">Choose your time</h2>
+      <fieldset class="plans" id="plans" aria-labelledby="plans-title"></fieldset>
+
+      <div class="pay-area">
+        <button class="btn btn-blaggo" id="pay-blaggo" type="button">
+          <span id="pay-label">Pay using Blaggo</span>
+          <img class="blaggo-logo" src="blaggo-logo.png" alt="" onerror="this.remove()" />
+        </button>
+        <p class="pay-note">Your time starts as soon as the payment goes through.</p>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <h2 class="sheet-title">Other ways to connect</h2>
+      <div class="other-ways">
+        <button class="way" type="button" data-go="coin">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.2c-.5-.8-1.4-1.2-2.5-1.2-1.5 0-2.6.8-2.6 2s1.1 1.6 2.6 2 2.6.8 2.6 2-1.1 2-2.6 2c-1.2 0-2.2-.5-2.6-1.3M12 6.5V8m0 8v1.5" stroke-linecap="round"/></svg>
+          <strong>Insert coins</strong>
+          <span>Use the coin slot on the machine</span>
+        </button>
+        <button class="way" type="button" data-go="voucher">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h15A1.5 1.5 0 0 1 21 7.5V10a2 2 0 0 0 0 4v2.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5V14a2 2 0 0 0 0-4Z"/><path d="M15 6v12" stroke-dasharray="2 2.2"/></svg>
+          <strong>Use a voucher</strong>
+          <span>Enter the code on your ticket</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Pay using Blaggo -->
+  <section id="screen-blaggo" hidden>
+    <div class="sheet">
+      <button class="back" type="button" data-cancel>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        Change plan
+      </button>
+      <div class="amount-row">
+        <p class="amount" id="pay-amount">₱10</p>
+        <p class="amount-for" id="pay-for">for 3 hours</p>
+      </div>
+
+      <ol class="steps">
+        <li><span class="step-num">1</span><span>Open the Blaggo app.</span></li>
+        <li><span class="step-num">2</span><span>Pay <strong id="merchant-name">Peso WiFi</strong> and enter the reference code below.</span></li>
+        <li><span class="step-num">3</span><span>Come back to this page. You'll be connected automatically.</span></li>
+      </ol>
+
+      <div class="ref">
+        <div>
+          <p class="ref-label">Reference code</p>
+          <p class="ref-code" id="ref-code">------</p>
+        </div>
+        <button class="copy" type="button" id="copy-ref">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>
+          <span>Copy</span>
+        </button>
+      </div>
+
+      <div class="waiting" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="waiting-text">Waiting for your payment</span>
+        <time id="expires">10:00</time>
+      </div>
+
+      <div class="stack">
+        <a class="btn btn-blaggo" id="open-blaggo" href="#">
+          Open Blaggo
+          <img class="blaggo-logo" src="blaggo-logo.png" alt="" onerror="this.remove()" />
+        </a>
+        <button class="btn btn-outline" type="button" data-cancel>Cancel payment</button>
+        <button class="btn btn-text" type="button" id="simulate-pay" hidden>Simulate a successful payment (demo)</button>
+      </div>
+      <p class="message message-error" id="pay-error" hidden></p>
+    </div>
+  </section>
+
+  <!-- 3. Coins -->
+  <section id="screen-coin" hidden>
+    <div class="sheet">
+      <button class="back" type="button" data-cancel>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        Back
+      </button>
+      <h2 class="sheet-title">Drop your coins in the slot now</h2>
+      <div class="coin-total">
+        <p class="amount" id="coin-amount">₱0</p>
+      </div>
+      <p class="coin-time" id="coin-time">Insert ₱1, ₱5, ₱10 or ₱20 coins</p>
+      <div class="coin-demo" id="coin-demo" hidden aria-label="Demo coins">
+        <button type="button" data-coin="1">₱1</button>
+        <button type="button" data-coin="5">₱5</button>
+        <button type="button" data-coin="10">₱10</button>
+      </div>
+      <div class="waiting" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Coin slot is open</span>
+        <time id="coin-expires">1:00</time>
+      </div>
+      <button class="btn btn-dark" type="button" id="coin-done" disabled>Start browsing</button>
+    </div>
+  </section>
+
+  <!-- 4. Voucher -->
+  <section id="screen-voucher" hidden>
+    <form class="sheet" id="voucher-form">
+      <button class="back" type="button" data-cancel>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        Back
+      </button>
+      <h2 class="sheet-title">Enter your voucher code</h2>
+      <label class="field">
+        <span>Voucher code</span>
+        <input id="voucher-code" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="4" />
+      </label>
+      <button class="btn btn-dark" type="submit" id="voucher-submit">Connect</button>
+      <p class="message message-error" id="voucher-error" hidden></p>
+    </form>
+  </section>
+
+  <!-- 5. Online -->
+  <section id="screen-online" hidden>
+    <div class="sheet online">
+      <div class="online-badge">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+      </div>
+      <h2 class="sheet-title" style="margin:0">You're online</h2>
+      <p class="countdown" id="countdown">0:00:00</p>
+      <p class="countdown-label">Time left. Keep this page to check it anytime.</p>
+      <a class="btn btn-blaggo" id="continue" href="https://www.google.com">Start browsing</a>
+    </div>
+  </section>
+
+  <span class="demo-flag" id="demo-flag" hidden>Demo mode: no real payments</span>
+
+  <footer class="foot">
+    <p id="support">Need help? Ask the store attendant.</p>
+    <p id="device"></p>
+  </footer>
+</main>
+
+<!-- Used to log the device in on the router (e.g. MikroTik hotspot) after payment. -->
+<form id="hotspot-login" method="post" hidden>
+  <input type="hidden" name="username" />
+  <input type="hidden" name="password" />
+  <input type="hidden" name="dst" />
+  <input type="hidden" name="popup" value="false" />
+</form>
+
+<script>
+/* =====================================================================
+   CONFIG: change these to match your shop and your payment backend.
+   ===================================================================== */
+var CONFIG = {
+  networkName: 'Peso WiFi',
+  merchantName: 'Peso WiFi',           // name customers see in Blaggo
+  supportText: 'Need help? Ask the store attendant.',
+
+  plans: [
+    { id: 'p5',  price: 5,  minutes: 60 },
+    { id: 'p10', price: 10, minutes: 180, tag: 'Most picked' },
+    { id: 'p20', price: 20, minutes: 480 },
+    { id: 'p50', price: 50, minutes: 4320, tag: 'Best value' }
+  ],
+  defaultPlan: 'p10',
+
+  blaggo: {
+    // Link that opens the Blaggo app. Replace with the official link from Blaggo.
+    appLink: 'blaggo://',
+    // Your server endpoints. Leave empty to run in demo mode.
+    createPaymentUrl: '',   // POST {planId, amount, mac, ip} -> {reference}
+    statusUrl: '',          // GET ?reference=... -> {status: 'pending'|'paid'|'failed'|'expired', username?, password?}
+    pollEveryMs: 3000,
+    expiresAfterMin: 10
+  },
+
+  voucherUrl: '',           // POST {code, mac, ip} -> {ok, minutes, username?, password?}. Empty = send code straight to router.
+  coinSeconds: 60,
+  pesoMinutes: 12           // coin rate: minutes per ₱1
+};
+
+/* ===================================================================== */
+(function () {
+  var DEMO = !CONFIG.blaggo.createPaymentUrl;
+
+  // Router details passed in the URL (MikroTik: ?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&dst=$(link-orig))
+  var params = new URLSearchParams(location.search);
+  var device = {
+    mac: params.get('mac') || '',
+    ip: params.get('ip') || '',
+    loginUrl: params.get('link-login-only') || params.get('link-login') || '',
+    dst: params.get('dst') || params.get('link-orig') || 'https://www.google.com'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { plan: null, payment: null, pollTimer: null, tickTimer: null, coins: 0, coinTimer: null };
+
+  // ---------- helpers ----------
+  function peso(n) { return '\u20B1' + n.toLocaleString('en-PH'); }
+  function duration(min) {
+    if (min < 60) return min + ' min';
+    if (min % 1440 === 0) { var d = min / 1440; return d + (d === 1 ? ' day' : ' days'); }
+    var h = Math.floor(min / 60), m = min % 60;
+    var out = h + (h === 1 ? ' hour' : ' hours');
+    return m ? out + ' ' + m + ' min' : out;
+  }
+  function clock(sec, withHours) {
+    sec = Math.max(0, Math.floor(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    var mm = (withHours ? String(m).padStart(2, '0') : m), ss = String(s).padStart(2, '0');
+    return withHours ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+  }
+  function store(key, value) {
+    try { value === undefined ? localStorage.removeItem(key) : localStorage.setItem(key, value); } catch (e) {}
+  }
+  function read(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+
+  function show(name) {
+    ['choose', 'blaggo', 'coin', 'voucher', 'online'].forEach(function (s) {
+      $('screen-' + s).hidden = s !== name;
+    });
+    var heads = {
+      choose: ['Get online', 'Pick how long you need, then pay with Blaggo.'],
+      blaggo: ['Pay with Blaggo', 'Finish the payment in the Blaggo app.'],
+      coin: ['Insert coins', 'Every \u20B11 adds ' + CONFIG.pesoMinutes + ' minutes.'],
+      voucher: ['Use a voucher', 'Type the code printed on your ticket.'],
+      online: ['Enjoy browsing', 'Your device is connected to ' + CONFIG.networkName + '.']
+    };
+    $('headline').textContent = heads[name][0];
+    $('lede').textContent = heads[name][1];
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- setup ----------
+  $('network-name').textContent = CONFIG.networkName;
+  $('merchant-name').textContent = CONFIG.merchantName;
+  $('support').textContent = CONFIG.supportText;
+  document.title = CONFIG.networkName;
+  if (device.mac || device.ip) $('device').textContent = 'Device ' + [device.mac, device.ip].filter(Boolean).join(' / ');
+  $('demo-flag').hidden = !DEMO;
+
+  var plansEl = $('plans');
+  CONFIG.plans.forEach(function (p) {
+    var label = document.createElement('label');
+    label.className = 'plan';
+    label.innerHTML =
+      '<input type="radio" name="plan" value="' + p.id + '"' + (p.id === CONFIG.defaultPlan ? ' checked' : '') + '>' +
+      '<span class="plan-body">' +
+        '<span class="plan-time">' + duration(p.minutes) + '</span>' +
+        '<span class="plan-price">' + peso(p.price) + '</span>' +
+        (p.tag ? '<span class="plan-tag">' + p.tag + '</span>' : '') +
+      '</span>' +
+      '<span class="plan-check" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>';
+    plansEl.appendChild(label);
+  });
+
+  function selectedPlan() {
+    var el = plansEl.querySelector('input:checked');
+    return CONFIG.plans.filter(function (p) { return el && p.id === el.value; })[0] || CONFIG.plans[0];
+  }
+  function updatePayLabel() {
+    var p = selectedPlan();
+    $('pay-label').textContent = 'Pay ' + peso(p.price) + ' using Blaggo';
+  }
+  plansEl.addEventListener('change', updatePayLabel);
+  updatePayLabel();
+
+  // ---------- Blaggo payment ----------
+  $('pay-blaggo').addEventListener('click', startBlaggo);
+
+  function startBlaggo() {
+    var plan = selectedPlan();
+    state.plan = plan;
+    var btn = $('pay-blaggo');
+    btn.disabled = true;
+
+    createPayment(plan).then(function (payment) {
+      state.payment = payment;
+      $('pay-amount').textContent = peso(plan.price);
+      $('pay-for').textContent = 'for ' + duration(plan.minutes);
+      $('ref-code').textContent = payment.reference;
+      $('open-blaggo').href = payment.appLink || CONFIG.blaggo.appLink;
+      $('pay-error').hidden = true;
+      $('simulate-pay').hidden = !DEMO;
+      show('blaggo');
+      startWaiting(payment);
+    }).catch(function (err) {
+      alert('Payment couldn\u2019t start: ' + err.message + '. Check your connection to the WiFi and try again.');
+    }).then(function () { btn.disabled = false; });
+  }
+
+  function createPayment(plan) {
+    if (DEMO) {
+      var code = 'PW' + Math.random().toString(36).slice(2, 8).toUpperCase();
+      return Promise.resolve({ reference: code });
+    }
+    return fetch(CONFIG.blaggo.createPaymentUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planId: plan.id, amount: plan.price, mac: device.mac, ip: device.ip })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('server replied ' + r.status);
+      return r.json();
+    });
+  }
+
+  function startWaiting(payment) {
+    stopWaiting();
+    var expiresAt = Date.now() + CONFIG.blaggo.expiresAfterMin * 60000;
+    function tick() {
+      var left = (expiresAt - Date.now()) / 1000;
+      $('expires').textContent = clock(left);
+      if (left <= 0) failPayment('This payment expired. Go back and start a new one.');
+    }
+    tick();
+    state.tickTimer = setInterval(tick, 1000);
+
+    if (!DEMO) {
+      state.pollTimer = setInterval(function () {
+        fetch(CONFIG.blaggo.statusUrl + '?reference=' + encodeURIComponent(payment.reference))
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res.status === 'paid') paid(res);
+            else if (res.status === 'failed') failPayment('Blaggo declined the payment. Check your balance and try again.');
+            else if (res.status === 'expired') failPayment('This payment expired. Go back and start a new one.');
+          })
+          .catch(function () { /* keep waiting; the network can be flaky */ });
+      }, CONFIG.blaggo.pollEveryMs);
+    }
+  }
+
+  function stopWaiting() {
+    clearInterval(state.pollTimer);
+    clearInterval(state.tickTimer);
+  }
+
+  function failPayment(text) {
+    stopWaiting();
+    $('waiting-text').textContent = 'Payment stopped';
+    $('pay-error').textContent = text;
+    $('pay-error').hidden = false;
+  }
+
+  function paid(res) {
+    stopWaiting();
+    connect(state.plan.minutes, res && res.username, res && res.password);
+  }
+
+  $('simulate-pay').addEventListener('click', function () { paid({}); });
+
+  $('copy-ref').addEventListener('click', function () {
+    var text = $('ref-code').textContent;
+    var label = this.querySelector('span');
+    function done() { label.textContent = 'Copied'; setTimeout(function () { label.textContent = 'Copy'; }, 1500); }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+    function fallback() {
+      var t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      t.remove();
+    }
+  });
+
+  // ---------- Coins ----------
+  function startCoins() {
+    state.coins = 0;
+    renderCoins();
+    $('coin-demo').hidden = !DEMO;
+    var endAt = Date.now() + CONFIG.coinSeconds * 1000;
+    clearInterval(state.coinTimer);
+    state.coinTimer = setInterval(function () {
+      var left = (endAt - Date.now()) / 1000;
+      $('coin-expires').textContent = clock(left);
+      if (left <= 0) {
+        clearInterval(state.coinTimer);
+        if (state.coins > 0) connect(state.coins * CONFIG.pesoMinutes);
+        else show('choose');
+      }
+    }, 250);
+    show('coin');
+  }
+  function renderCoins() {
+    $('coin-amount').textContent = peso(state.coins);
+    $('coin-time').textContent = state.coins
+      ? 'That\u2019s ' + duration(state.coins * CONFIG.pesoMinutes) + ' of browsing'
+      : 'Insert \u20B11, \u20B15, \u20B110 or \u20B120 coins';
+    $('coin-done').disabled = state.coins === 0;
+  }
+  // Your coin-slot hardware (vendo board) can call window.addCoin(value) when a coin drops.
+  window.addCoin = function (value) { state.coins += Number(value) || 0; renderCoins(); };
+  $('coin-demo').addEventListener('click', function (e) {
+    var v = e.target.getAttribute('data-coin');
+    if (v) window.addCoin(v);
+  });
+  $('coin-done').addEventListener('click', function () {
+    clearInterval(state.coinTimer);
+    connect(state.coins * CONFIG.pesoMinutes);
+  });
+
+  // ---------- Voucher ----------
+  $('voucher-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var code = $('voucher-code').value.trim().toUpperCase();
+    var err = $('voucher-error');
+    err.hidden = true;
+
+    if (!CONFIG.voucherUrl) {
+      // No voucher server: hand the code straight to the router (MikroTik user = voucher code).
+      if (device.loginUrl) return routerLogin(code, '');
+      if (DEMO) return connect(60);
+      err.textContent = 'Vouchers aren\u2019t set up on this network. Ask the store attendant.';
+      err.hidden = false;
+      return;
+    }
+    $('voucher-submit').disabled = true;
+    fetch(CONFIG.voucherUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, mac: device.mac, ip: device.ip })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res.ok) throw new Error(res.message || 'That code isn\u2019t valid or was already used.');
+      connect(res.minutes, res.username, res.password);
+    }).catch(function (ex) {
+      err.textContent = ex.message;
+      err.hidden = false;
+    }).then(function () { $('voucher-submit').disabled = false; });
+  });
+
+  // ---------- Getting online ----------
+  function routerLogin(username, password) {
+    var f = $('hotspot-login');
+    f.action = device.loginUrl;
+    f.username.value = username;
+    f.password.value = password || '';
+    f.dst.value = device.dst;
+    f.submit();
+  }
+
+  function connect(minutes, username, password) {
+    var endsAt = Date.now() + minutes * 60000;
+    store('pw-ends-at', String(endsAt));
+    if (device.loginUrl && username) return routerLogin(username, password);
+    showOnline(endsAt);
+  }
+
+  function showOnline(endsAt) {
+    $('status').textContent = 'Online';
+    $('status').classList.add('is-online');
+    $('continue').href = device.dst;
+    show('online');
+    clearInterval(state.tickTimer);
+    function tick() {
+      var left = (endsAt - Date.now()) / 1000;
+      $('countdown').textContent = clock(left, true);
+      if (left <= 0) {
+        clearInterval(state.tickTimer);
+        store('pw-ends-at');
+        $('status').textContent = 'Time\u2019s up';
+        $('status').classList.remove('is-online');
+        show('choose');
+      }
+    }
+    tick();
+    state.tickTimer = setInterval(tick, 1000);
+  }
+
+  // ---------- Navigation ----------
+  document.querySelectorAll('[data-go]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.getAttribute('data-go') === 'coin') startCoins();
+      else { show('voucher'); $('voucher-code').focus(); }
+    });
+  });
+  document.querySelectorAll('[data-cancel]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      stopWaiting();
+      clearInterval(state.coinTimer);
+      $('waiting-text').textContent = 'Waiting for your payment';
+      show('choose');
+    });
+  });
+
+  // Returning visitor with time left goes straight to the timer.
+  var saved = Number(read('pw-ends-at'));
+  if (saved && saved > Date.now()) showOnline(saved);
+})();
+</script>
+</body>
+</html>
